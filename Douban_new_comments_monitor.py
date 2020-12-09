@@ -5,43 +5,14 @@ from lxml import etree
 import os
 import re
 import time
+import datetime
+from hashlib import md5
 ua = UserAgent()
 headers = {'User-Agent' : ua.random}
-from getpass import getpass
-
-
-#home_page = "https://movie.douban.com/subject/20376577/"
-
-#comment_page = 'https://movie.douban.com/subject/20376577/comments?start=0&limit=20&status=P&sort=new_score'
 
 
 
-class DouBan(object):
-    """
-    Used to login with Douban and maintain the session for request. 
-    """
-    def __init__(self):
-        self.login_url = 'https://accounts.douban.com/j/mobile/login/basic'
-        self.headers = {
-            "User-Agent": ua.safari
-        }
-        self.login_data = {
-            'ck': '',
-            'name': input('User Name\n'),
-            'password': getpass('Your Douban Password\n'),
-            'remember': 'false',
-            #'ticket': ''
-        }
-        self.session = requests.Session()
-        self.login()
-
-    def login(self):
-        response = self.session.post(self.login_url, data=self.login_data, headers=self.headers)
-        print(response.json())
-
-    def get_html(self, url):
-        return self.session.get(url, headers = self.headers)
-
+md5_set = set()
 
 
 def parse_homepage(url,session):
@@ -59,18 +30,17 @@ def parse_homepage(url,session):
 
     return(film,director,actor,length,total_review_number)
 
-
 def parse_comments(url,session,start,stop,max_comments):
 
 
     if stop> max_comments:
         print(f'The maximum comments available is:{max_comments}')
         os.abort()
-    with open(f'{film[0]}.csv',mode='a',newline='',encoding='UTF-8-sig') as f:
+    with open(f"{film[0]}_new_comments {start_date}.csv",mode='a',newline='',encoding='UTF-8-sig') as f:
         writer = csv.writer(f)
         for index in range(start,stop,20):
             print(f'parsing comments {index}')
-            comment_page = f'{url}/comments?start={index}&limit=20&status=P&sort=new_score'
+            comment_page = f'{url}/comments?start={index}&limit=20&status=P&sort=time'
             response = session.get(comment_page,headers=headers)
             
             
@@ -115,7 +85,14 @@ def parse_comments(url,session,start,stop,max_comments):
                     dates[i]
                     scores[i]
                     upvotes[i]
-                    writer.writerow([user_names[i],watched_already[i],comments[i],dates[i],scores[i],upvotes[i]])
+                    gathered_info = user_names[i]+user_names[i]+watched_already[i]+comments[i]+dates[i]+scores[i]+upvotes[i]
+                    digest_algorithm = md5()
+                    digest_algorithm.update(gathered_info.encode())
+                    hexcode = digest_algorithm.hexdigest()
+                    if hexcode not in md5_set:
+                        writer.writerow([datetime.datetime.now(),user_names[i],watched_already[i],comments[i],dates[i],scores[i],upvotes[i]])
+                        md5_set.add(hexcode)
+                        print('New comments Found!')
             else:
                 print('Blocked! ')
                 time.sleep(10)
@@ -126,38 +103,33 @@ def parse_comments(url,session,start,stop,max_comments):
             
             
             time.sleep(5)
-            
-
-
-
 
 
 
 if __name__ == "__main__":
-    douban = DouBan()
-    douban.login()
-    session = douban.session
+
+    session = requests.Session()
     home_page = input('Paste the url of the home page here.\n')
 
     film,director,actor,length,total_review_number = parse_homepage(home_page,session)
 
-    #Parse the home page 
-    with open(f'{film[0]}.csv',mode='w',newline='',encoding='UTF-8-sig') as f:
+    #Parse the home page
+    start_date = datetime.datetime.now().strftime(r'%Y-%m-%d')
+    with open(f'{film[0]}_new_comments {start_date}.csv',mode='w',newline='',encoding='UTF-8-sig') as f:
         writer = csv.writer(f)
         writer.writerows([film,director,actor,length])
         writer.writerow(['\n'])
-        writer.writerow(['UserName','Watched Already','Comments','Dates','Review_Score','Upvote'])
+        writer.writerow(['Parsing Time','UserName','Watched Already','Comments','Dates','Review_Score','Upvote'])
 
 
 
-    stop = int(input(f'How many comments do you want to parse? Maximum of {total_review_number}\n'))
+    stop = 21 # only a maximum of 100 is shown by Douban
 
 
-    parse_comments(home_page,session,start=0,stop=stop,max_comments=total_review_number)
+    parsing_interval = int(input('Parsing interval in minutes\n'))*60
 
+    while(True):
 
+        parse_comments(home_page,session,start=0,stop=stop,max_comments=total_review_number)
 
-    
-    
-        
-
+        time.sleep(parsing_interval)
