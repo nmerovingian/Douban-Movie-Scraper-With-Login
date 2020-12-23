@@ -7,13 +7,16 @@ import re
 import time
 import datetime
 from hashlib import md5
+import pickle
 ua = UserAgent()
 headers = {'User-Agent' : ua.random}
 
 
 
-md5_set = set()
+#md5_set = set()
 
+
+start_date = datetime.datetime.now().strftime(r'%Y-%m-%d')
 
 def parse_homepage(url,session):
     data = session.get(url, headers=headers).text
@@ -34,14 +37,19 @@ def parse_comments(url,session,start,stop,max_comments):
 
 
     if stop> max_comments:
-        print(f'The maximum comments available is:{max_comments}')
+        print('The maximum comments available is:{}'.format(max_comments))
         os.abort()
-    with open(f"{film[0]}_new_comments {start_date}.csv",mode='a',newline='',encoding='UTF-8-sig') as f:
+    with open("{}_new_comments {}.csv".format(film[0],start_date),mode='a',newline='',encoding='UTF-8-sig') as f:
         writer = csv.writer(f)
         for index in range(start,stop,20):
-            print(f'parsing comments {index}')
-            comment_page = f'{url}/comments?start={index}&limit=20&status=P&sort=time'
-            response = session.get(comment_page,headers=headers)
+            print('parsing comments {}'.format(index))
+            comment_page = '{}/comments?start={}&limit=20&status=P&sort=time'.format(url,index)
+
+
+            try:
+                response = session.get(comment_page,headers=headers)
+            except:
+                return
             
             
             
@@ -76,7 +84,7 @@ def parse_comments(url,session,start,stop,max_comments):
 
             #print(len(user_names),len(comments),len(dates),len(scores),len(upvotes),len(watched_already))
 
-            if len(user_names):
+            if len(user_names) and len(user_names)==len(comments):
             
                 for i in range(len(user_names)):
                     user_names[i]
@@ -93,6 +101,10 @@ def parse_comments(url,session,start,stop,max_comments):
                         writer.writerow([datetime.datetime.now(),user_names[i],watched_already[i],comments[i],dates[i],scores[i],upvotes[i]])
                         md5_set.add(hexcode)
                         print('New comments Found!')
+
+                with open('{}.pkl'.format(film),'wb') as f :
+                    pickle.dump(md5_set,f)
+
             else:
                 print('Blocked! ')
                 time.sleep(10)
@@ -113,20 +125,36 @@ if __name__ == "__main__":
 
     film,director,actor,length,total_review_number = parse_homepage(home_page,session)
 
+    if os.path.exists('{}.pkl'.format(film)):
+
+        with open('{}.pkl'.format(film),'rb') as f :
+            md5_set = pickle.load(f)
+
+    else:
+        md5_set = set()
+        with open('{}.pkl'.format(film),'wb') as f :
+            pickle.dump(md5_set,f)
+
+
+
     #Parse the home page
-    start_date = datetime.datetime.now().strftime(r'%Y-%m-%d')
-    with open(f'{film[0]}_new_comments {start_date}.csv',mode='w',newline='',encoding='UTF-8-sig') as f:
+
+    """
+    with open('{}_new_comments {}.csv'.format(film[0],start_date),mode='w',newline='',encoding='UTF-8-sig') as f:
         writer = csv.writer(f)
         writer.writerows([film,director,actor,length])
         writer.writerow(['\n'])
-        writer.writerow(['Parsing Time','UserName','Watched Already','Comments','Dates','Review_Score','Upvote'])
+        writer.writerow(['Parsing Time','UserName','Watched Already','Comments','Dates','Review_Score','Upvote'])"""
 
 
-
-    stop = 21 # only a maximum of 100 is shown by Douban
 
 
     parsing_interval = int(input('Parsing interval in minutes\n'))*60
+
+    stop = 81 # only a maximum of 100 is shown by Douban
+    parse_comments(home_page,session,start=0,stop=stop,max_comments=total_review_number)
+
+    #stop = 21 #Now only parse the first page of new comments
 
     while(True):
 
