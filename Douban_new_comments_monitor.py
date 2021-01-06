@@ -8,6 +8,7 @@ import time
 import datetime
 from hashlib import md5
 import pickle
+from concurrent.futures import ThreadPoolExecutor
 ua = UserAgent()
 headers = {'User-Agent' : ua.random}
 
@@ -16,7 +17,7 @@ headers = {'User-Agent' : ua.random}
 #md5_set = set()
 
 
-start_date = datetime.datetime.now().strftime(r'%Y-%m-%d')
+
 
 def parse_homepage(url,session):
     data = session.get(url, headers=headers).text
@@ -33,8 +34,8 @@ def parse_homepage(url,session):
 
     return(film,director,actor,length,total_review_number)
 
-def parse_comments(url,session,start,stop,max_comments):
-
+def parse_comments(url,session,film,start,stop,max_comments,md5_set):
+    start_date = datetime.datetime.now().strftime(r'%Y-%m-%d')
 
     if stop> max_comments:
         print('The maximum comments available is:{}'.format(max_comments))
@@ -45,7 +46,7 @@ def parse_comments(url,session,start,stop,max_comments):
             print('parsing comments {}'.format(index))
             comment_page = '{}/comments?start={}&limit=20&status=P&sort=time'.format(url,index)
 
-
+            headers = {'User-Agent' : ua.random}
             try:
                 response = session.get(comment_page,headers=headers)
             except:
@@ -100,13 +101,13 @@ def parse_comments(url,session,start,stop,max_comments):
                     if hexcode not in md5_set:
                         writer.writerow([datetime.datetime.now(),user_names[i],watched_already[i],comments[i],dates[i],scores[i],upvotes[i]])
                         md5_set.add(hexcode)
-                        print('New comments Found!')
+                        print(film,'New comments Found!')
 
                 with open('{}.pkl'.format(film),'wb') as f :
                     pickle.dump(md5_set,f)
 
             else:
-                print('Blocked! ')
+                print(film,'Blocked! ')
                 time.sleep(10)
 
             
@@ -117,11 +118,10 @@ def parse_comments(url,session,start,stop,max_comments):
             time.sleep(5)
 
 
-
-if __name__ == "__main__":
+def parse_movie(home_page,parsing_interval):
 
     session = requests.Session()
-    home_page = input('Paste the url of the home page here.\n')
+
 
     film,director,actor,length,total_review_number = parse_homepage(home_page,session)
 
@@ -149,15 +149,52 @@ if __name__ == "__main__":
 
 
 
-    parsing_interval = int(input('Parsing interval in minutes\n'))*60
+
 
     stop = 81 # only a maximum of 100 is shown by Douban
-    parse_comments(home_page,session,start=0,stop=stop,max_comments=total_review_number)
+    parse_comments(home_page,session,film=film,start=0,stop=stop,max_comments=total_review_number,md5_set=md5_set)
 
     #stop = 21 #Now only parse the first page of new comments
 
     while(True):
 
-        parse_comments(home_page,session,start=0,stop=stop,max_comments=total_review_number)
+        parse_comments(home_page,session,film,start=0,stop=stop,max_comments=total_review_number,md5_set=md5_set)
 
         time.sleep(parsing_interval)
+
+
+def foo(movie, parsing_interval):
+    print(movie,parsing_interval)
+
+
+if __name__ == "__main__":
+    start_date = datetime.datetime.now().strftime(r'%Y-%m-%d')
+
+    home_pages = set()
+
+
+
+    """
+    while True:
+        home_page = input('Paste the url of the home page here. Enter one url at a time.\nPress ENTER to finish.\n')
+        if len(home_page)>0:
+            home_pages.add(home_page)
+        else:
+            break"""
+
+    home_pages = {'https://movie.douban.com/subject/26673282/', 'https://movie.douban.com/subject/30284141/'}
+
+        
+    print(home_pages)
+
+
+
+
+
+    parsing_interval = int(input('Parsing interval in minutes\n'))*60
+
+
+    with ThreadPoolExecutor() as executor:
+
+        executor.map(parse_movie,list(home_pages),[parsing_interval]*len(home_pages))
+
